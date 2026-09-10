@@ -1,0 +1,80 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "com.thementaltiltja.hub"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.thementaltiltja.hub"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // versionCode/versionName above are bumped by the release workflow
+        // using the RELEASE_VERSION_CODE / RELEASE_VERSION_NAME env vars
+        // when they are set (see .github/workflows/release.yml). Leave the
+        // hardcoded values above as-is for local/debug builds.
+        if (System.getenv("RELEASE_VERSION_CODE") != null) {
+            versionCode = System.getenv("RELEASE_VERSION_CODE").toInteger()
+        }
+        if (System.getenv("RELEASE_VERSION_NAME") != null) {
+            versionName = System.getenv("RELEASE_VERSION_NAME")
+        }
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Only apply real signing when the CI/CD secrets are present
+            // (see .github/workflows/release.yml). Without them, a "release"
+            // build still compiles, just unsigned, so local builds never fail.
+            if (System.getenv("RELEASE_KEYSTORE_PATH") != null) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    signingConfigs {
+        release {
+            if (System.getenv("RELEASE_KEYSTORE_PATH") != null) {
+                storeFile file(System.getenv("RELEASE_KEYSTORE_PATH"))
+                storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

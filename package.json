@@ -1,0 +1,21 @@
+{
+  "name": "wellness-hub-apk",
+  "version": "1.0.0",
+  "description": "Android app wrapper for The Mental Tilt Wellness Hub (web-app-chi-ten.vercel.app). Loads the live web app inside a native Android shell via Capacitor. Does not contain or modify the web app's own source code.",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync android",
+    "open:android": "cap open android",
+    "assets": "capacitor-assets generate --android"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.1",
+    "typescript": "^7.0.2"
+  }
+}

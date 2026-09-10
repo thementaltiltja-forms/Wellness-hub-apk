@@ -1,0 +1,101 @@
+name: Build Signed Release (APK + AAB)
+
+# This workflow makes a real, signed, installable version of the app and
+# publishes it as a public GitHub Release — a normal web page with a
+# "Download" button that anyone can open, no GitHub account needed.
+#
+# It only runs when you push a version tag (like v1.0.0), so your everyday
+# work on the app doesn't trigger it by accident. See
+# HOW_TO_SHARE_AND_PUBLISH.md for the full step-by-step walkthrough.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version name shown to users, e.g. 1.0.0"
+        required: true
+        default: "1.0.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Work out version number
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NAME="${{ github.event.inputs.version_name }}"
+          else
+            NAME="${GITHUB_REF_NAME#v}"
+          fi
+          # A simple ever-increasing build number Android requires
+          # (versionCode), separate from the human-readable version name.
+          CODE=$(date +%Y%m%d%H)
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Decode signing key
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Build signed release APK + AAB
+        working-directory: android
+        env:
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.code }}
+          RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
+          RELEASE_KEYSTORE_PATH: app/release.keystore
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Remove signing key from disk
+        if: always()
+        run: rm -f android/app/release.keystore
+
+      - name: Rename output files
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "out/WellnessHub-${{ steps.version.outputs.name }}.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab \
+             "out/WellnessHub-${{ steps.version.outputs.name }}.aab"
+
+      - name: Publish public GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          name: Wellness Hub v${{ steps.version.outputs.name }}
+          body: |
+            **For most people:** download the `.apk` file below, open it on an
+            Android phone, and tap Install.
+
+            **For uploading to the Google Play Console:** use the `.aab` file
+            instead — Play Store does not accept `.apk` uploads.
+          files: |
+            out/*.apk
+            out/*.aab
